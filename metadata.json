@@ -1,0 +1,7 @@
+{
+  "name": "ClassCare - Quản Lý Lớp Chủ Nhiệm",
+  "description": "Hệ thống quản lý lớp chủ nhiệm THCS toàn diện dành cho giáo viên: học tập, chuyên cần, thi đua, nhận xét, phụ huynh và AI trợ lý.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
