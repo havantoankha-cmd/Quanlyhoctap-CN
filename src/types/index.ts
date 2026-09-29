@@ -152,6 +152,55 @@ export interface ClassConfig {
   teacherEmail: string;
 }
 
+export type ChatCategory = 'class' | 'teachers' | 'parents' | 'cadres' | 'ai';
+
+export interface ChatAttachment {
+  id: string;
+  name: string;
+  type: 'image' | 'file';
+  url: string;
+  size?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderRole?: string;
+  senderAvatar?: string;
+  content: string;
+  timestamp: string; // e.g. "08:15"
+  date: string; // YYYY-MM-DD
+  isPinned?: boolean;
+  isImportant?: boolean;
+  attachments?: ChatAttachment[];
+  reactions?: Record<string, number>;
+  userReaction?: string;
+  replyToId?: string;
+  replyToSnippet?: string;
+}
+
+export interface ChatConversation {
+  id: string;
+  category: ChatCategory;
+  title: string;
+  subtitle?: string;
+  avatarUrl?: string;
+  avatarBg?: string;
+  isGroup: boolean;
+  unreadCount: number;
+  lastMessage?: string;
+  lastMessageTime?: string;
+  isPinned?: boolean;
+  isOnline?: boolean;
+  studentId?: string;
+  teacherId?: string;
+  teamNumber?: number;
+  membersCount?: number;
+  description?: string;
+  messages: ChatMessage[];
+}
+
 export type NavigationPath =
   | 'trang-chu'
   | 'hoc-sinh/danh-sach'
@@ -174,6 +223,12 @@ export type NavigationPath =
   | 'nhan-xet/thang'
   | 'nhan-xet/cuoi-ky'
   | 'phu-huynh'
+  | 'chat'
+  | 'chat/toan-lop'
+  | 'chat/giao-vien'
+  | 'chat/phu-huynh'
+  | 'chat/ban-can-su'
+  | 'chat/tro-ly-ai'
   | 'ai-phan-tich'
   | 'bao-cao'
   | 'cai-dat';

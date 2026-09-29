@@ -12,6 +12,10 @@ import {
   NavigationPath,
   Teacher,
   TeacherCollabNote,
+  ChatConversation,
+  ChatMessage,
+  ChatCategory,
+  ChatAttachment,
 } from '../types';
 import {
   initialStudents,
@@ -26,6 +30,7 @@ import {
   initialTeachers,
   initialTeacherCollabNotes,
 } from '../data/initialData';
+import { initialChatConversations } from '../data/initialChatData';
 
 export interface ToastMessage {
   id: string;
@@ -46,6 +51,25 @@ interface AppContextType {
   setSelectedClass: (cls: string) => void;
   globalSearchQuery: string;
   setGlobalSearchQuery: (query: string) => void;
+
+  // Chat States & Actions
+  chatConversations: ChatConversation[];
+  activeConversationId: string;
+  setActiveConversationId: (id: string) => void;
+  selectedChatCategory: ChatCategory | 'all';
+  setSelectedChatCategory: (category: ChatCategory | 'all') => void;
+  chatSearchQuery: string;
+  setChatSearchQuery: (query: string) => void;
+  totalUnreadChatCount: number;
+  sendChatMessage: (conversationId: string, content: string, attachments?: ChatAttachment[], replyToMessage?: ChatMessage) => Promise<void>;
+  deleteChatMessage: (conversationId: string, messageId: string) => void;
+  togglePinChatMessage: (conversationId: string, messageId: string) => void;
+  addReactionToMessage: (conversationId: string, messageId: string, emoji: string) => void;
+  markConversationAsRead: (conversationId: string) => void;
+  markAllConversationsAsRead: () => void;
+  openChatWithParent: (studentId: string) => void;
+  openChatWithTeacher: (teacherId: string) => void;
+  createNewConversation: (newConv: Omit<ChatConversation, 'id' | 'messages' | 'unreadCount'>) => string;
 
   // Data states
   students: Student[];
@@ -168,6 +192,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [teacherNotes, setTeacherNotes] = useState<TeacherCollabNote[]>(() => loadStored('teacherNotes', initialTeacherCollabNotes));
   const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(null);
 
+  // Chat States
+  const [chatConversations, setChatConversations] = useState<ChatConversation[]>(() =>
+    loadStored('chatConversations', initialChatConversations)
+  );
+  const [activeConversationId, setActiveConversationId] = useState<string>('channel-class');
+  const [selectedChatCategory, setSelectedChatCategory] = useState<ChatCategory | 'all'>('all');
+  const [chatSearchQuery, setChatSearchQuery] = useState<string>('');
+
   // Sync to local storage
   useEffect(() => { localStorage.setItem(STORAGE_KEY_PREFIX + 'students', JSON.stringify(students)); }, [students]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_PREFIX + 'subjects', JSON.stringify(subjects)); }, [subjects]);
@@ -180,6 +212,362 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => { localStorage.setItem(STORAGE_KEY_PREFIX + 'classConfig', JSON.stringify(classConfig)); }, [classConfig]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_PREFIX + 'teachers', JSON.stringify(teachers)); }, [teachers]);
   useEffect(() => { localStorage.setItem(STORAGE_KEY_PREFIX + 'teacherNotes', JSON.stringify(teacherNotes)); }, [teacherNotes]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEY_PREFIX + 'chatConversations', JSON.stringify(chatConversations)); }, [chatConversations]);
+
+  // Audio chime
+  const playSound = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.22);
+    } catch {
+      // Audio autoplay may be disabled
+    }
+  };
+
+  // Total unread chat messages
+  const totalUnreadChatCount = useMemo(() => {
+    return chatConversations.reduce((acc, conv) => acc + (conv.unreadCount || 0), 0);
+  }, [chatConversations]);
+
+  // Mark conversation as read
+  const markConversationAsRead = (convId: string) => {
+    setChatConversations((prev) =>
+      prev.map((c) => (c.id === convId ? { ...c, unreadCount: 0 } : c))
+    );
+  };
+
+  // Mark all as read
+  const markAllConversationsAsRead = () => {
+    setChatConversations((prev) => prev.map((c) => ({ ...c, unreadCount: 0 })));
+    showToast('Đã đánh dấu đã đọc tất cả tin nhắn.');
+  };
+
+  // Send message
+  const sendChatMessage = async (
+    convId: string,
+    content: string,
+    attachments?: ChatAttachment[],
+    replyToMessage?: ChatMessage
+  ) => {
+    if (!content.trim() && (!attachments || attachments.length === 0)) return;
+
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const dateStr = now.toISOString().split('T')[0];
+    const newMsgId = 'msg-' + Date.now().toString(36);
+
+    const newMsg: ChatMessage = {
+      id: newMsgId,
+      senderId: 'gvcn',
+      senderName: `Thầy ${classConfig.teacherName}`,
+      senderRole: 'GVCN Lớp 7A',
+      senderAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
+      content: content.trim(),
+      timestamp: timeStr,
+      date: dateStr,
+      attachments: attachments && attachments.length > 0 ? attachments : undefined,
+      replyToId: replyToMessage?.id,
+      replyToSnippet: replyToMessage
+        ? `${replyToMessage.senderName}: ${replyToMessage.content.slice(0, 60)}...`
+        : undefined,
+    };
+
+    setChatConversations((prev) =>
+      prev.map((c) => {
+        if (c.id === convId) {
+          return {
+            ...c,
+            lastMessage: `Bạn: ${content.trim() || '[Đã gửi đính kèm]'}`,
+            lastMessageTime: timeStr,
+            unreadCount: 0,
+            messages: [...c.messages, newMsg],
+          };
+        }
+        return c;
+      })
+    );
+
+    playSound();
+
+    // AI channel smart reply handling
+    if (convId === 'channel-ai') {
+      setTimeout(async () => {
+        let aiReplyText = '';
+        const userPrompt = content.trim();
+
+        try {
+          // Prepare context about Class 7A
+          const classContext = {
+            className: classConfig.className,
+            school: classConfig.schoolName,
+            term: classConfig.currentTerm,
+            teacher: classConfig.teacherName,
+            totalStudents: students.length,
+            attentionStudents: students
+              .filter((s) => s.status === 'Cần quan tâm' || s.status === 'Khẩn cấp')
+              .map((s) => ({ name: s.name, status: s.status, note: s.statusNote })),
+          };
+
+          const res = await fetch('/api/gemini/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: `Là Trợ lý AI Sư phạm của lớp 7A (GVCN: Thầy ${classConfig.teacherName}), hãy trả lời câu hỏi/yêu cầu sau của giáo viên một cách chuyên nghiệp, sư phạm, thiết thực và ân cần:\n${userPrompt}`,
+              context: classContext,
+            }),
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            if (data.text) {
+              aiReplyText = data.text;
+            }
+          }
+        } catch {
+          // Fallback handled below
+        }
+
+        if (!aiReplyText) {
+          // Pedagogical local rule-based intelligence
+          const lower = userPrompt.toLowerCase();
+          if (lower.includes('phụ huynh') || lower.includes('tin nhắn') || lower.includes('soạn')) {
+            aiReplyText = `Kính gửi thầy Toàn! Dưới đây là mẫu tin nhắn sư phạm chuẩn mực gửi phụ huynh được tối ưu cho tình huống này:
+
+---
+"Kính gửi Quý phụ huynh! 
+Tôi là thầy Hà Văn Toàn, Giáo viên Chủ nhiệm lớp 7A Trường THCS Tăng Bạt Hổ. 
+Tôi xin phép gửi lời chào và trao đổi nhanh về tình hình học tập và rèn luyện của cháu trong tuần vừa qua. Nhìn chung, cháu rất lễ phép và có nhiều cố gắng, tuy nhiên để đạt kết quả tốt nhất trong kỳ thi giữa kỳ sắp tới, thầy rất mong gia đình cùng đồng hành, nhắc nhở cháu ôn bài kỹ vào buổi tối và chuẩn bị đầy đủ dụng cụ học tập trước khi đến lớp. 
+Mọi trao đổi thêm, phụ huynh có thể liên hệ trực tiếp với tôi qua số điện thoại 0912 345 678. 
+Trân trọng cảm ơn sự phối hợp quý báu của gia đình!"
+---
+
+💡 **Gợi ý sư phạm:** Thầy có thể điều chỉnh tên học sinh hoặc chi tiết môn học cụ thể trước khi gửi để tăng tính gần gũi và hiệu quả!`;
+          } else if (lower.includes('nghỉ học') || lower.includes('vắng') || lower.includes('chuyên cần')) {
+            aiReplyText = `Thưa thầy Toàn! Về vấn đề chuyên cần của học sinh (đặc biệt các em có số buổi vắng tăng như em Bích):
+1. **Liên hệ ngay với phụ huynh**: Gọi điện trực tiếp hoặc gửi tin nhắn nhắc nhở để xác minh lý do vắng (sức khỏe, việc gia đình).
+2. **Kế hoạch hỗ trợ kiến thức**: Phân công bạn học cùng bàn hoặc cán sự bộ môn cho mượn vở ghi chép, hướng dẫn các bài tập trọng tâm.
+3. **Động viên tâm lý**: Khi học sinh quay lại lớp, thầy nên gặp riêng 3-5 phút đầu giờ để thăm hỏi nhẹ nhàng, tránh tạo áp lực tâm lý cho học sinh trước tập thể.`;
+          } else if (lower.includes('khen') || lower.includes('tiến bộ') || lower.includes('thưởng')) {
+            aiReplyText = `Thưa thầy Toàn! Việc biểu dương học sinh kịp thời mang lại động lực học tập rất lớn:
+🌟 **Gợi ý khen ngợi:**
+- Tuyên dương trước lớp trong giờ sinh hoạt 15 phút đầu giờ hoặc tiết sinh hoạt cuối tuần.
+- Cộng từ 3-5 điểm thi đua cá nhân và ghi nhận vào sổ theo dõi nề nếp.
+- Gửi tin nhắn ngắn khen ngợi tới phụ huynh: phụ huynh sẽ rất tự hào và tiếp tục đồng hành tích cực cùng nhà trường!`;
+          } else {
+            aiReplyText = `Thầy Toàn thân mến! Tôi đã ghi nhận yêu cầu của thầy. 
+Đối với tập thể Lớp 7A trong giai đoạn ${classConfig.currentTerm}, tôi khuyến nghị thầy:
+- Tiếp tục duy trì việc theo dõi sát sao sổ đầu bài và bảng chấm thi đua giữa 4 tổ.
+- Chuẩn bị tốt tâm lý cho học sinh trước các đợt kiểm tra đánh giá định kỳ.
+- Tận dụng các kênh trao đổi với giáo viên bộ môn Toán, Văn, Anh, KHTN để nắm bắt học sinh cần phụ đạo sớm.
+
+Thầy có cần tôi soạn thảo thông báo cụ thể nào gửi lên Kênh Toàn Lớp hoặc gửi riêng cho Ban Đại diện Phụ huynh không ạ?`;
+          }
+        }
+
+        const aiMsg: ChatMessage = {
+          id: 'msg-ai-' + Date.now().toString(36),
+          senderId: 'ai',
+          senderName: 'Trợ Lý AI Sư Phạm',
+          senderRole: 'AI Assistant',
+          content: aiReplyText,
+          timestamp: `${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`,
+          date: new Date().toISOString().split('T')[0],
+        };
+
+        setChatConversations((prev) =>
+          prev.map((c) => {
+            if (c.id === 'channel-ai') {
+              return {
+                ...c,
+                lastMessage: `Trợ lý AI: ${aiReplyText.slice(0, 50)}...`,
+                lastMessageTime: aiMsg.timestamp,
+                messages: [...c.messages, aiMsg],
+              };
+            }
+            return c;
+          })
+        );
+        playSound();
+      }, 700);
+    }
+  };
+
+  // Delete message
+  const deleteChatMessage = (convId: string, messageId: string) => {
+    setChatConversations((prev) =>
+      prev.map((c) => {
+        if (c.id === convId) {
+          const updatedMessages = c.messages.filter((m) => m.id !== messageId);
+          const lastMsg = updatedMessages[updatedMessages.length - 1];
+          return {
+            ...c,
+            messages: updatedMessages,
+            lastMessage: lastMsg ? `${lastMsg.senderName}: ${lastMsg.content.slice(0, 40)}` : '',
+            lastMessageTime: lastMsg ? lastMsg.timestamp : '',
+          };
+        }
+        return c;
+      })
+    );
+    showToast('Đã xóa tin nhắn.');
+  };
+
+  // Toggle pin message
+  const togglePinChatMessage = (convId: string, messageId: string) => {
+    setChatConversations((prev) =>
+      prev.map((c) => {
+        if (c.id === convId) {
+          return {
+            ...c,
+            messages: c.messages.map((m) =>
+              m.id === messageId ? { ...m, isPinned: !m.isPinned } : m
+            ),
+          };
+        }
+        return c;
+      })
+    );
+    showToast('Đã cập nhật trạng thái ghim tin nhắn.');
+  };
+
+  // Add reaction
+  const addReactionToMessage = (convId: string, messageId: string, emoji: string) => {
+    setChatConversations((prev) =>
+      prev.map((c) => {
+        if (c.id === convId) {
+          return {
+            ...c,
+            messages: c.messages.map((m) => {
+              if (m.id === messageId) {
+                const reactions = { ...(m.reactions || {}) };
+                if (m.userReaction === emoji) {
+                  // toggle off
+                  reactions[emoji] = Math.max(0, (reactions[emoji] || 1) - 1);
+                  if (reactions[emoji] === 0) delete reactions[emoji];
+                  return { ...m, reactions, userReaction: undefined };
+                } else {
+                  // remove old reaction if existed
+                  if (m.userReaction && reactions[m.userReaction]) {
+                    reactions[m.userReaction] = Math.max(0, reactions[m.userReaction] - 1);
+                    if (reactions[m.userReaction] === 0) delete reactions[m.userReaction];
+                  }
+                  reactions[emoji] = (reactions[emoji] || 0) + 1;
+                  return { ...m, reactions, userReaction: emoji };
+                }
+              }
+              return m;
+            }),
+          };
+        }
+        return c;
+      })
+    );
+  };
+
+  // Open chat with parent of student
+  const openChatWithParent = (studentId: string) => {
+    const student = students.find((s) => s.id === studentId);
+    let conv = chatConversations.find((c) => c.studentId === studentId);
+
+    if (!conv && student) {
+      const newConvId = `parent-${student.id}`;
+      const newConv: ChatConversation = {
+        id: newConvId,
+        category: 'parents',
+        title: `Phụ huynh em ${student.name}`,
+        subtitle: `${student.parentRelationship} ${student.parentName} • SĐT: ${student.parentPhone}`,
+        avatarUrl: student.avatarUrl,
+        avatarBg: 'bg-emerald-600',
+        isGroup: false,
+        unreadCount: 0,
+        studentId: student.id,
+        messages: [
+          {
+            id: 'msg-p-init-' + Date.now().toString(36),
+            senderId: 'gvcn',
+            senderName: `Thầy ${classConfig.teacherName}`,
+            senderRole: 'GVCN Lớp 7A',
+            content: `Chào ${student.parentRelationship.toLowerCase()} em ${student.name}! Tôi là thầy Toàn, GVCN lớp 7A. Thầy mở kênh liên lạc riêng để tiện trao đổi tình hình học tập và rèn luyện của cháu.`,
+            timestamp: `${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`,
+            date: new Date().toISOString().split('T')[0],
+          },
+        ],
+      };
+      setChatConversations((prev) => [newConv, ...prev]);
+      setActiveConversationId(newConvId);
+    } else if (conv) {
+      setActiveConversationId(conv.id);
+    }
+
+    setSelectedChatCategory('parents');
+    setActivePath('chat/phu-huynh');
+  };
+
+  // Open chat with teacher
+  const openChatWithTeacher = (teacherId: string) => {
+    const teacher = teachers.find((t) => t.id === teacherId);
+    let conv = chatConversations.find((c) => c.teacherId === teacherId);
+
+    if (!conv && teacher) {
+      const newConvId = `teacher-${teacher.id}`;
+      const newConv: ChatConversation = {
+        id: newConvId,
+        category: 'teachers',
+        title: `${teacher.name} (${teacher.subjectNames.join(', ')})`,
+        subtitle: `${teacher.role} • SĐT: ${teacher.phone}`,
+        avatarUrl: teacher.avatarUrl,
+        avatarBg: 'bg-blue-600',
+        isGroup: false,
+        unreadCount: 0,
+        teacherId: teacher.id,
+        messages: [
+          {
+            id: 'msg-t-init-' + Date.now().toString(36),
+            senderId: 'gvcn',
+            senderName: `Thầy ${classConfig.teacherName}`,
+            senderRole: 'GVCN Lớp 7A',
+            content: `Chào đồng chí ${teacher.name}! Tôi là Toàn GVCN 7A, rất mong nhận được sự phối hợp chặt chẽ của đồng chí trong bộ môn ${teacher.subjectNames.join(', ')}.`,
+            timestamp: `${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`,
+            date: new Date().toISOString().split('T')[0],
+          },
+        ],
+      };
+      setChatConversations((prev) => [newConv, ...prev]);
+      setActiveConversationId(newConvId);
+    } else if (conv) {
+      setActiveConversationId(conv.id);
+    }
+
+    setSelectedChatCategory('teachers');
+    setActivePath('chat/giao-vien');
+  };
+
+  // Create new conversation
+  const createNewConversation = (newConvData: Omit<ChatConversation, 'id' | 'messages' | 'unreadCount'>) => {
+    const id = 'conv-' + Date.now().toString(36);
+    const newConv: ChatConversation = {
+      ...newConvData,
+      id,
+      unreadCount: 0,
+      messages: [],
+    };
+    setChatConversations((prev) => [newConv, ...prev]);
+    setActiveConversationId(id);
+    showToast(`Đã tạo cuộc trò chuyện "${newConvData.title}" thành công.`);
+    return id;
+  };
 
   // Teacher CRUD
   const addTeacher = (teacherData: Omit<Teacher, 'id'>) => {
@@ -534,6 +922,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setSelectedClass,
         globalSearchQuery,
         setGlobalSearchQuery,
+        chatConversations,
+        activeConversationId,
+        setActiveConversationId,
+        selectedChatCategory,
+        setSelectedChatCategory,
+        chatSearchQuery,
+        setChatSearchQuery,
+        totalUnreadChatCount,
+        sendChatMessage,
+        deleteChatMessage,
+        togglePinChatMessage,
+        addReactionToMessage,
+        markConversationAsRead,
+        markAllConversationsAsRead,
+        openChatWithParent,
+        openChatWithTeacher,
+        createNewConversation,
         students,
         subjects,
         scores,

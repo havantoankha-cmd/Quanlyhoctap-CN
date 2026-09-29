@@ -12,11 +12,14 @@ import {
   X,
   ExternalLink,
   BookOpen,
+  MessageSquare,
+  Check,
 } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const {
     classConfig,
+    updateClassConfig,
     selectedClass,
     setSelectedClass,
     setActivePath,
@@ -25,6 +28,8 @@ export const Header: React.FC = () => {
     students,
     teachers,
     openStudentProfile,
+    totalUnreadChatCount,
+    showToast,
   } = useApp();
 
   const [isClassDropdownOpen, setIsClassDropdownOpen] = useState(false);
@@ -151,9 +156,42 @@ export const Header: React.FC = () => {
           <div className="flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5 text-slate-500" />
             <span>Năm học {classConfig.schoolYear}</span>
-            <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[11px] font-medium border border-slate-200">
-              {classConfig.currentTerm}
-            </span>
+            <div className="inline-flex items-center p-0.5 bg-slate-100 rounded-md border border-slate-200">
+              <button
+                type="button"
+                onClick={() => {
+                  if (classConfig.currentTerm !== 'Học kỳ I') {
+                    updateClassConfig({ currentTerm: 'Học kỳ I' });
+                    showToast('Đã chuyển sang Học kỳ I');
+                  }
+                }}
+                className={`px-1.5 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer ${
+                  classConfig.currentTerm === 'Học kỳ I'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Chọn Học kỳ I"
+              >
+                HK I
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (classConfig.currentTerm !== 'Học kỳ II') {
+                    updateClassConfig({ currentTerm: 'Học kỳ II' });
+                    showToast('Đã chuyển sang Học kỳ II');
+                  }
+                }}
+                className={`px-1.5 py-0.5 rounded text-[11px] font-bold transition-all cursor-pointer ${
+                  classConfig.currentTerm === 'Học kỳ II'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Chọn Học kỳ II"
+              >
+                HK II
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -326,6 +364,20 @@ export const Header: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* Chat / Messages Button */}
+        <button
+          onClick={() => setActivePath('chat/toan-lop')}
+          className="relative p-2 text-slate-600 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition-colors"
+          title="Mục chát & Trao đổi lớp học"
+        >
+          <MessageSquare className="w-4 h-4" />
+          {totalUnreadChatCount > 0 && (
+            <span className="absolute top-1 right-1 w-4 h-4 bg-rose-500 text-white text-[9px] font-extrabold rounded-full flex items-center justify-center animate-pulse">
+              {totalUnreadChatCount}
+            </span>
+          )}
+        </button>
 
         {/* Help / Guide */}
         <button

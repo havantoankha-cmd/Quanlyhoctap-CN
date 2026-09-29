@@ -25,6 +25,7 @@ import { AIAssistant } from './components/ai/AIAssistant';
 import { ReportCenter } from './components/reports/ReportCenter';
 import { SettingsView } from './components/settings/SettingsView';
 import { TeacherManagement } from './components/teachers/TeacherManagement';
+import { ChatHub } from './components/chat/ChatHub';
 
 const MainContent: React.FC = () => {
   const { activePath } = useApp();

@@ -15,6 +15,8 @@ import {
   HeartHandshake,
   Bot,
   ChevronRight,
+  Check,
+  MessageSquare,
 } from 'lucide-react';
 import { BarChart, DonutChart } from '../common/Charts';
 
@@ -23,12 +25,21 @@ export const Dashboard: React.FC = () => {
     students,
     subjects,
     classConfig,
+    updateClassConfig,
     classMetrics,
     openStudentProfile,
     setActivePath,
     calculateStudentSubjectAverage,
     teachers,
+    showToast,
+    totalUnreadChatCount,
   } = useApp();
+
+  const handleTermChange = (newTerm: 'Học kỳ I' | 'Học kỳ II') => {
+    if (classConfig.currentTerm === newTerm) return;
+    updateClassConfig({ currentTerm: newTerm });
+    showToast(`Đã chuyển sang ${newTerm} năm học ${classConfig.schoolYear}`);
+  };
 
   // Highlighted students needing attention or showing great progress
   const priorityStudents = students.filter(
@@ -83,13 +94,52 @@ export const Dashboard: React.FC = () => {
             <span className="bg-white/15 px-2.5 py-1 rounded-md backdrop-blur-xs">
               Năm học {classConfig.schoolYear}
             </span>
-            <span className="bg-emerald-400/20 text-emerald-200 border border-emerald-300/30 px-2.5 py-1 rounded-md font-bold">
-              {classConfig.currentTerm}
-            </span>
+
+            {/* Interactive Term Selector: Học kỳ I & Học kỳ II */}
+            <div className="inline-flex items-center p-0.5 bg-black/25 backdrop-blur-md rounded-lg border border-white/20 shadow-xs">
+              <button
+                type="button"
+                onClick={() => handleTermChange('Học kỳ I')}
+                className={`px-3 py-1 rounded-md font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer ${
+                  classConfig.currentTerm === 'Học kỳ I'
+                    ? 'bg-emerald-500 text-white shadow-xs'
+                    : 'text-blue-100 hover:text-white hover:bg-white/10'
+                }`}
+                title="Bấm để chọn Học kỳ I"
+              >
+                {classConfig.currentTerm === 'Học kỳ I' && <Check className="w-3.5 h-3.5" />}
+                <span>Học kỳ I</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTermChange('Học kỳ II')}
+                className={`px-3 py-1 rounded-md font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer ${
+                  classConfig.currentTerm === 'Học kỳ II'
+                    ? 'bg-emerald-500 text-white shadow-xs'
+                    : 'text-blue-100 hover:text-white hover:bg-white/10'
+                }`}
+                title="Bấm để chọn Học kỳ II"
+              >
+                {classConfig.currentTerm === 'Học kỳ II' && <Check className="w-3.5 h-3.5" />}
+                <span>Học kỳ II</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setActivePath('chat/toan-lop')}
+            className="flex items-center gap-2 px-3.5 py-2.5 bg-white/15 hover:bg-white/25 text-white font-semibold text-xs rounded-xl backdrop-blur-xs transition-all border border-white/20 hover:scale-[1.02]"
+          >
+            <MessageSquare className="w-4 h-4 text-cyan-300" />
+            <span>Mục Chát & Trao đổi</span>
+            {totalUnreadChatCount > 0 && (
+              <span className="w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-extrabold flex items-center justify-center animate-pulse">
+                {totalUnreadChatCount}
+              </span>
+            )}
+          </button>
           <button
             onClick={() => setActivePath('ai-phan-tich')}
             className="flex items-center gap-2 px-4 py-2.5 bg-white text-blue-700 hover:bg-blue-50 font-bold text-xs rounded-xl shadow-md transition-all hover:scale-[1.02]"

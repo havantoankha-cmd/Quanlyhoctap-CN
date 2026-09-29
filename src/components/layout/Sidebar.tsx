@@ -19,6 +19,7 @@ import {
   PanelLeftOpen,
   UserCheck,
   School,
+  MessageCircle,
 } from 'lucide-react';
 
 interface SubMenuItem {
@@ -32,6 +33,7 @@ interface MenuItem {
   icon: React.ReactNode;
   path?: NavigationPath;
   subItems?: SubMenuItem[];
+  badge?: number;
 }
 
 export const Sidebar: React.FC = () => {
@@ -41,16 +43,18 @@ export const Sidebar: React.FC = () => {
     isSidebarCollapsed,
     setIsSidebarCollapsed,
     classConfig,
+    totalUnreadChatCount,
   } = useApp();
 
   // Accordion state: keep track of which menus are expanded
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({
-    'hoc-sinh': true,
-    'giao-vien': true,
-    'hoc-tap': true,
-    'chuyen-can': true,
+    'hoc-sinh': false,
+    'giao-vien': false,
+    'hoc-tap': false,
+    'chuyen-can': false,
     'thi-dua': false,
     'nhan-xet': false,
+    'chat': true,
   });
 
   const toggleSubMenu = (menuId: string) => {
@@ -130,6 +134,19 @@ export const Sidebar: React.FC = () => {
       label: 'PHỤ HUYNH',
       icon: <HeartHandshake className="w-4 h-4 flex-shrink-0" />,
       path: 'phu-huynh',
+    },
+    {
+      id: 'chat',
+      label: 'MỤC CHÁT',
+      icon: <MessageCircle className="w-4 h-4 flex-shrink-0 text-cyan-300" />,
+      badge: totalUnreadChatCount,
+      subItems: [
+        { label: 'Kênh lớp 7A (Chung)', path: 'chat/toan-lop' },
+        { label: 'GV Bộ môn Lớp 7A', path: 'chat/giao-vien' },
+        { label: 'Trao đổi Phụ huynh', path: 'chat/phu-huynh' },
+        { label: 'Ban cán sự & Tổ 1-4', path: 'chat/ban-can-su' },
+        { label: 'Trợ lý AI Sư phạm', path: 'chat/tro-ly-ai' },
+      ],
     },
     {
       id: 'ai-phan-tich',
@@ -239,17 +256,29 @@ export const Sidebar: React.FC = () => {
                 title={menu.label}
               >
                 <div className="flex items-center gap-3">
-                  {menu.icon}
+                  <div className="relative">
+                    {menu.icon}
+                    {menu.badge && menu.badge > 0 && isSidebarCollapsed && (
+                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 rounded-full animate-pulse" />
+                    )}
+                  </div>
                   {!isSidebarCollapsed && <span>{menu.label}</span>}
                 </div>
                 {!isSidebarCollapsed && (
-                  <span className="text-slate-400">
-                    {isExpanded ? (
-                      <ChevronDown className="w-3.5 h-3.5 transition-transform" />
-                    ) : (
-                      <ChevronRight className="w-3.5 h-3.5 transition-transform" />
+                  <div className="flex items-center gap-1.5">
+                    {menu.badge && menu.badge > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[10px] font-black animate-pulse">
+                        {menu.badge}
+                      </span>
                     )}
-                  </span>
+                    <span className="text-slate-400">
+                      {isExpanded ? (
+                        <ChevronDown className="w-3.5 h-3.5 transition-transform" />
+                      ) : (
+                        <ChevronRight className="w-3.5 h-3.5 transition-transform" />
+                      )}
+                    </span>
+                  </div>
                 )}
               </button>
 
